@@ -1,0 +1,7 @@
+logs/*
+*.log
+generated/*
+temp/*
+excel/*
+output/*
+public/assets/* 
