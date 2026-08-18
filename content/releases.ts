@@ -35,6 +35,7 @@ export const releases: ReleaseNote[] = [
         items: [
           'Buyer and delivery party IDs now support BRN, NRIC, passport, and army identification types',
           'Clearer validation messages when addresses, postcodes, state codes, or dates are incomplete or invalid',
+          'When LHDN rejects an invoice, you now see what is wrong, why it matters, and which field to fix before resubmitting',
         ],
       },
       {

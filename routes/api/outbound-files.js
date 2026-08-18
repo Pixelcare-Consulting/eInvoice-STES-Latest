@@ -2455,6 +2455,7 @@ router.post('/:fileName/submit-to-lhdn', auth.isApiAuthenticated, async (req, re
                         error: {
                             code: errorDetails.code || 'VALIDATION_ERROR',
                             message: errorDetails.message || 'LHDN validation failed',
+                            invoiceCodeNumber: errorDetails.invoiceCodeNumber || invoice_number || null,
                             details: errorDetails.details || errorDetails
                         },
                         docNum: invoice_number,
@@ -3661,18 +3662,23 @@ router.post('/:fileName/submit-to-lhdn-consolidated', auth.isApiAuthenticated, a
 
             if (!result.data) {
                 // Before throwing an error, check if there are rejected documents in the result
-                if (result.status === 'failed' && result.error?.details?.error?.details?.length > 0) {
-                    // There are validation errors, show them to the user
-                    const errorDetails = result.error.details;
+                if (result.status === 'failed' && result.error) {
+                    const errorDetails = result.error;
+                    const nestedDetails = Array.isArray(errorDetails.details)
+                        ? errorDetails.details
+                        : (errorDetails.details?.error?.details || errorDetails.details);
                     return res.status(400).json({
                         success: false,
                         error: {
-                            code: 'VALIDATION_ERROR',
-                            message: errorDetails.message || 'LHDN validation failed',
-                            details: errorDetails
+                            code: errorDetails.code || 'VALIDATION_ERROR',
+                            message: errorDetails.message || 'Document was rejected by LHDN',
+                            invoiceCodeNumber: errorDetails.invoiceCodeNumber || invoice_number || null,
+                            details: nestedDetails || errorDetails
                         },
                         docNum: invoice_number,
-                        rejectedDocuments: [errorDetails]
+                        rejectedDocuments: Array.isArray(errorDetails.details)
+                            ? errorDetails.details
+                            : (errorDetails.details ? [errorDetails.details] : [])
                     });
                 }
 

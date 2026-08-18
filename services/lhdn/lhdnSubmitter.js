@@ -622,12 +622,20 @@ class LHDNSubmitter {
       // Check if there are rejected documents
       if (result.data?.rejectedDocuments?.length > 0) {
         const rejectedDoc = result.data.rejectedDocuments[0];
+        const nestedDetails = Array.isArray(rejectedDoc.error?.details)
+          ? rejectedDoc.error.details
+          : [];
+        const firstDetail = nestedDetails.find((detail) => (
+          detail && detail.code && String(detail.code) !== '2'
+        )) || nestedDetails[0];
+
         return {
           status: 'failed',
           error: {
-            code: rejectedDoc.code || 'REJECTION',
-            message: rejectedDoc.message || 'Document was rejected by LHDN',
-            details: rejectedDoc
+            code: firstDetail?.code || 'REJECTION',
+            message: 'Document was rejected by LHDN',
+            invoiceCodeNumber: rejectedDoc.invoiceCodeNumber || docs[0]?.codeNumber || null,
+            details: nestedDetails
           }
         };
       }

@@ -7148,39 +7148,33 @@ async function showLHDNErrorModal(error) {
     } catch (helperError) {
         console.error('Error using LHDN UI Helper:', helperError);
 
-        // Fallback to modern error display if helper fails
-        const errorCode = formattedError.code || 'VALIDATIONERROR';
-        const errorMessage = formattedError.message || 'Invalid document data provided.';
+        const fallbackDetails = getFriendlyFallbackDetails(formattedError);
+        const errorCode = shouldHideErrorCode(formattedError.code) ? 'REJECTION' : (formattedError.code || 'REJECTION');
+        const errorMessage = formattedError.message || 'Document was rejected by LHDN.';
+        const invoiceNumber = formattedError.invoiceCodeNumber || '';
+        const invoiceContext = invoiceNumber
+            ? `<div class="lhdn-invoice-context">Invoice <strong>${escapeFallbackHtml(invoiceNumber)}</strong></div>`
+            : '';
 
-        // Create error details list
         let errorDetailsHtml = '';
-        if (formattedError.details && formattedError.details.length > 0) {
-            errorDetailsHtml = `
-                <div class="error-list-container">
-                    <div class="error-group">
-                        <div class="error-group-header">
-                            <i class="fas fa-list"></i>
-                            <span>Error Details</span>
-                        </div>
-                        <ul class="error-list">
-            `;
-
-            formattedError.details.forEach((detail, index) => {
-                const detailMessage = typeof detail === 'string' ? detail :
-                                    (detail.message || detail.code || JSON.stringify(detail));
-                errorDetailsHtml += `
-                    <li class="error-item">
-                        <span class="error-number">${index + 1}</span>
-                        <span class="error-text">${detailMessage}</span>
-                    </li>
+        if (fallbackDetails.length > 0) {
+            errorDetailsHtml = `<div class="lhdn-issue-card-list">${fallbackDetails.map((detail) => {
+                const issueText = typeof detail === 'string' ? detail : (detail.message || detail.code || 'Please review this field.');
+                const fieldName = typeof detail === 'object' ? (detail.target || '') : '';
+                return `
+                    <article class="lhdn-issue-card">
+                        <section class="lhdn-issue-section lhdn-issue-detected">
+                            <h6><i class="fas fa-exclamation-circle"></i> Issue Detected</h6>
+                            <p>${escapeFallbackHtml(issueText)}</p>
+                            ${fieldName ? `<ul class="lhdn-issue-bullets"><li>${escapeFallbackHtml(fieldName)}</li></ul>` : ''}
+                        </section>
+                        <section class="lhdn-issue-section lhdn-issue-next">
+                            <h6><i class="fas fa-lightbulb"></i> Next Step</h6>
+                            <p>Update the highlighted field in your Excel file, then resubmit.</p>
+                        </section>
+                    </article>
                 `;
-            });
-
-            errorDetailsHtml += `
-                        </ul>
-                    </div>
-                </div>
-            `;
+            }).join('')}</div>`;
         }
 
         const modernErrorHtml = `
@@ -7197,7 +7191,7 @@ async function showLHDNErrorModal(error) {
                     <div class="modal-meta">
                         <div class="meta-item">
                             <span class="meta-label">Error Code</span>
-                            <span class="meta-value">${errorCode}</span>
+                            <span class="meta-value">${escapeFallbackHtml(errorCode)}</span>
                         </div>
                         <div class="meta-item">
                             <span class="meta-label">Status</span>
@@ -7208,12 +7202,13 @@ async function showLHDNErrorModal(error) {
                 <div class="modal-content-section" style="padding: 2rem;">
                     <div class="error-code-badge">
                         <i class="fas fa-exclamation-triangle"></i>
-                        ${errorCode}
+                        ${escapeFallbackHtml(errorCode)}
                     </div>
 
                     <div class="error-message">
                         <h6><i class="fas fa-exclamation-circle"></i> LHDN Submission Error</h6>
-                        <p>${errorMessage}</p>
+                        <p>${escapeFallbackHtml(errorMessage)}</p>
+                        ${invoiceContext}
                     </div>
 
                     ${errorDetailsHtml}
@@ -7230,12 +7225,12 @@ async function showLHDNErrorModal(error) {
             html: modernErrorHtml,
             showConfirmButton: true,
             confirmButtonText: 'I Understand',
-            width: 800,
+            width: 640,
             padding: '0',
             background: 'transparent',
             customClass: {
-                popup: 'modern-modal large-modal',
-                confirmButton: 'modern-btn modern-btn-primary'
+                popup: 'modern-modal enhanced-error-modal',
+                confirmButton: 'modern-btn modern-btn-success'
             }
         });
 
@@ -7248,6 +7243,66 @@ async function showLHDNErrorModal(error) {
             InvoiceTableManager.getInstance().refresh();
         }
     }
+}
+
+function escapeFallbackHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function shouldHideErrorCode(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    return !normalized || normalized === '2' || normalized === 'VALIDATION_ERROR' || normalized === 'VALIDATIONERROR';
+}
+
+function isHiddenFallbackDetail(detail) {
+    if (detail == null) {
+        return true;
+    }
+
+    if (typeof detail === 'string') {
+        const lower = detail.trim().toLowerCase();
+        return lower.startsWith('invoicecodenumber')
+            || /^2\s*:\s*validation error$/.test(lower)
+            || lower === 'validation error';
+    }
+
+    if (typeof detail !== 'object') {
+        return true;
+    }
+
+    const code = String(detail.code || '');
+    const message = String(detail.message || '').trim().toLowerCase();
+    if (code === '2' || message === 'validation error') {
+        return true;
+    }
+
+    const keys = Object.keys(detail);
+    if (keys.length === 1 && keys[0] === 'invoiceCodeNumber') {
+        return true;
+    }
+
+    return false;
+}
+
+function getFriendlyFallbackDetails(error) {
+    if (typeof lhdnUIHelper !== 'undefined' && typeof lhdnUIHelper.extractValidationDetails === 'function') {
+        return lhdnUIHelper.extractValidationDetails(error);
+    }
+
+    let details = error && error.details;
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+        details = details.error && details.error.details ? details.error.details : details;
+    }
+
+    if (!Array.isArray(details)) {
+        return [];
+    }
+
+    return details.filter((detail) => !isHiddenFallbackDetail(detail));
 }
 
 // Helper function to format validation messages

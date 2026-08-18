@@ -5405,198 +5405,204 @@ async function showSystemErrorModal(error) {
 async function showLHDNErrorModal(error) {
     console.log('LHDN Error:', error);
 
-    // Parse error message if it's a string
-    let errorDetails = error;
-    try {
-        if (typeof error === 'string') {
-            errorDetails = JSON.parse(error);
+    let formattedError = error;
+
+    if (typeof error === 'string') {
+        try {
+            formattedError = JSON.parse(error);
+        } catch (parseError) {
+            formattedError = {
+                message: error,
+                code: 'SUBMISSION_ERROR'
+            };
         }
-    } catch (e) {
-        console.warn('Error parsing error message:', e);
     }
 
-    // Extract error details from the new error format
-    const errorData = Array.isArray(errorDetails) ? errorDetails[0] : errorDetails;
-    const mainError = {
-        code: errorData.code || 'VALIDATION_ERROR',
-        message: errorData.message || 'An unknown error occurred',
-        target: errorData.target || '',
-        details: errorData.details || {}
-    };
+    if (typeof formattedError === 'object' &&
+        formattedError.message &&
+        formattedError.message.includes('Enter valid phone number')) {
+        formattedError = {
+            code: 'CF414',
+            message: formattedError.message,
+            invoiceCodeNumber: formattedError.invoiceCodeNumber,
+            details: [{
+                code: 'CF414',
+                message: 'Enter valid phone number and the minimum length is 8 characters - SUPPLIER',
+                target: 'ContactNumber',
+                propertyPath: 'Invoice.AccountingSupplierParty.Party.Contact.Telephone'
+            }]
+        };
+    }
 
-    // Format the validation error details
-    const validationDetails = mainError.details?.error?.details || [];
+    try {
+        if (typeof lhdnUIHelper === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = '/assets/utils/lhdnUIHelper.js';
+                script.onload = resolve;
+                script.onerror = () => reject(new Error('Failed to load LHDN UI Helper'));
+                document.head.appendChild(script);
+            });
+        }
 
-    // Check if this is a TIN matching error and provide specific guidance
-    const isTINMatchingError = mainError.message.includes("authenticated TIN and documents TIN is not matching");
+        const isDuplicateSubmission = formattedError.code === 'DUPLICATE_SUBMISSION' || formattedError.code === 'DS302';
 
-    // Check if this is a duplicate submission error
-    const isDuplicateSubmission = mainError.code === 'DUPLICATE_SUBMISSION' || mainError.code === 'DS302';
+        lhdnUIHelper.showLHDNErrorModal(formattedError, {
+            title: 'LHDN Submission Error',
+            showDetails: true,
+            showSuggestion: true,
+            onClose: async () => {
+                if (isDuplicateSubmission) {
+                    let fileName = window.currentFileName;
+                    if (formattedError.target && typeof formattedError.target === 'string') {
+                        fileName = formattedError.target;
+                    }
 
-    // Create tooltip help content for TIN matching errors
-    const tinErrorGuidance = `
-        <div class="tin-matching-guidance" style="margin-top: 15px; padding: 12px; border-radius: 8px; background: #f8f9fa; border-left: 4px solid #17a2b8;">
-            <div style="display: flex; align-items: center; margin-bottom: 10px;">
-                <i class="fas fa-info-circle" style="color: #17a2b8; margin-right: 8px;"></i>
-                <span style="color: #17a2b8; font-size: 14px; font-weight: 600;">How to resolve TIN matching errors:</span>
-            </div>
-            <div style="padding-left: 6px; margin-bottom: 0; text-align: left; color: #495057; font-size: 13px;">
-                <div style="margin-bottom: 6px; display: flex; align-items: flex-start;">
-                    <i class="fas fa-check-circle" style="color: #17a2b8; margin-right: 8px; font-size: 12px; margin-top: 2px;"></i>
-                    <span>Verify that the supplier's TIN in your document matches exactly with the one registered with LHDN</span>
-                </div>
-                <div style="margin-bottom: 6px; display: flex; align-items: flex-start;">
-                    <i class="fas fa-check-circle" style="color: #17a2b8; margin-right: 8px; font-size: 12px; margin-top: 2px;"></i>
-                    <span>When using Login as Taxpayer API: The issuer TIN in the document must match with the TIN associated with your Client ID and Client Secret</span>
-                </div>
-                <div style="margin-bottom: 6px; display: flex; align-items: flex-start;">
-                    <i class="fas fa-check-circle" style="color: #17a2b8; margin-right: 8px; font-size: 12px; margin-top: 2px;"></i>
-                    <span>When using Login as Intermediary System API: The issuer TIN must match with the TIN of the taxpayer you're representing</span>
-                </div>
-                <div style="display: flex; align-items: flex-start;">
-                    <i class="fas fa-check-circle" style="color: #17a2b8; margin-right: 8px; font-size: 12px; margin-top: 2px;"></i>
-                    <span>For sole proprietors: You can validate TINs starting with "IG" along with your BRN if you have the "Business Owner" role in MyTax</span>
-                </div>
-            </div>
-            <div style="margin-top: 10px; font-size: 12px; color: #6c757d; text-align: right;">
-                <a href="https://sdk.myinvois.hasil.gov.my/faq/" target="_blank" style="color: #17a2b8; text-decoration: none; display: inline-flex; align-items: center;">
-                    <span>View LHDN FAQ for more details</span>
-                    <i class="fas fa-external-link-alt" style="margin-left: 4px; font-size: 10px;"></i>
-                </a>
-            </div>
-        </div>
-    `;
+                    if (fileName) {
+                        await updateSingleDocumentStatus(fileName);
+                    } else {
+                        InvoiceTableManager.getInstance().refresh();
+                    }
+                }
+            }
+        });
+    } catch (helperError) {
+        console.error('Error using LHDN UI Helper:', helperError);
 
-    Swal.fire({
-        title: 'LHDN Submission Error',
-        html: `
-            <div class="content-card swal2-content">
-                <div style="margin-bottom: 15px; text-align: center;">
-                    <div class="error-icon" style="color: #dc3545; font-size: 36px; margin-bottom: 15px;">
-                        <i class="fas fa-exclamation-circle" style="animation: pulseError 1.5s infinite;"></i>
-                    </div>
-                    <div style="background: #fff5f5; border-left: 4px solid #dc3545; padding: 10px; margin: 8px 0; border-radius: 4px; text-align: left; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-                        <div style="display: flex; align-items: flex-start;">
-                            <i class="fas fa-exclamation-triangle" style="color: #dc3545; margin-right: 8px; margin-top: 2px; font-size: 13px;"></i>
-                            <span style="font-weight: 500; font-size: 13px;">${mainError.message}</span>
+        const fallbackDetails = getFriendlyFallbackDetails(formattedError);
+        const errorCode = shouldHideErrorCode(formattedError.code) ? 'REJECTION' : (formattedError.code || 'REJECTION');
+        const errorMessage = formattedError.message || 'Document was rejected by LHDN.';
+        const invoiceNumber = formattedError.invoiceCodeNumber || '';
+        const invoiceContext = invoiceNumber
+            ? `<div class="lhdn-invoice-context">Invoice <strong>${escapeFallbackHtml(invoiceNumber)}</strong></div>`
+            : '';
+
+        let errorDetailsHtml = '';
+        if (fallbackDetails.length > 0) {
+            errorDetailsHtml = `<div class="lhdn-issue-card-list">${fallbackDetails.map((detail) => {
+                const issueText = typeof detail === 'string' ? detail : (detail.message || detail.code || 'Please review this field.');
+                const fieldName = typeof detail === 'object' ? (detail.target || '') : '';
+                return `
+                    <article class="lhdn-issue-card">
+                        <section class="lhdn-issue-section lhdn-issue-detected">
+                            <h6><i class="fas fa-exclamation-circle"></i> Issue Detected</h6>
+                            <p>${escapeFallbackHtml(issueText)}</p>
+                            ${fieldName ? `<ul class="lhdn-issue-bullets"><li>${escapeFallbackHtml(fieldName)}</li></ul>` : ''}
+                        </section>
+                        <section class="lhdn-issue-section lhdn-issue-next">
+                            <h6><i class="fas fa-lightbulb"></i> Next Step</h6>
+                            <p>Update the highlighted field in your Excel file, then resubmit.</p>
+                        </section>
+                    </article>
+                `;
+            }).join('')}</div>`;
+        }
+
+        Swal.fire({
+            html: `
+                <div class="modern-modal-content">
+                    <div class="modal-brand">
+                        <div class="brand-icon" style="background: rgba(239, 68, 68, 0.1); color: #ef4444;">
+                            <i class="fas fa-exclamation-triangle"></i>
                         </div>
-                    </div>
-                </div>
-
-                <div style="text-align: left; padding: 12px; border-radius: 8px; background: rgba(220, 53, 69, 0.05); box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                    <div style="margin-bottom: 8px; display: flex; align-items: center;">
-                        <span style="color: #495057; font-weight: 600; min-width: 85px; font-size: 12px;">Error Code:</span>
-                        <span style="color: #dc3545; font-family: monospace; background: rgba(220, 53, 69, 0.1); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${mainError.code}</span>
-                    </div>
-
-                    ${mainError.target ? `
-                    <div style="margin-bottom: 8px; display: flex; align-items: center;">
-                        <span style="color: #495057; font-weight: 600; min-width: 85px; font-size: 12px;">Error Target:</span>
-                        <span style="color: #495057; background: rgba(0,0,0,0.03); padding: 2px 6px; border-radius: 4px; font-size: 12px;">${mainError.target}</span>
-                    </div>
-                    ` : ''}
-
-                    ${validationDetails.length > 0 ? `
                         <div>
-                            <div style="color: #495057; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center;">
-                                <span style="font-size: 12px;">Validation Errors:</span>
-                                <span class="tooltip-container" style="margin-left: 6px; cursor: help; position: relative;">
-                                    <i class="fas fa-question-circle" style="color: #6c757d; font-size: 11px;"></i>
-                                    <div class="tooltip-content" style="position: absolute; width: 220px; background: #fff; border-radius: 4px; padding: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; display: none; top: -5px; left: 20px; font-weight: normal; font-size: 11px; color: #495057; text-align: left;">
-                                        These validation errors indicate specific issues with your submission data. Each error includes the path to the problematic field and details about what needs to be fixed.
-                                    </div>
-                                </span>
-                            </div>
-                            <div style="margin-top: 6px; max-height: 150px; overflow-y: auto; border-radius: 4px; border: 1px solid rgba(0,0,0,0.1);">
-                                ${validationDetails.map(detail => `
-                                    <div style="background: #fff; padding: 8px; border-radius: 0; margin-bottom: 1px; border-bottom: 1px solid rgba(0,0,0,0.05); font-size: 12px;">
-                                        <div style="margin-bottom: 4px; display: flex;">
-                                            <strong style="min-width: 60px; color: #495057; font-size: 11px;">Path:</strong>
-                                            <span style="color: #0d6efd; font-family: monospace; background: rgba(13, 110, 253, 0.05); padding: 0 3px; border-radius: 2px; font-size: 11px;">
-                                                ${detail.propertyPath || detail.target || 'Unknown'}
-                                            </span>
-                                        </div>
-                                        <div style="display: flex;">
-                                            <strong style="min-width: 60px; color: #495057; font-size: 11px;">Error:</strong>
-                                            <span style="font-size: 11px;">${formatValidationMessage(detail.message)}</span>
-                                        </div>
-                                        ${detail.code ? `
-                                            <div style="margin-top: 4px; color: #6c757d; display: flex;">
-                                                <strong style="min-width: 60px; color: #6c757d; font-size: 11px;">Code:</strong>
-                                                <span style="font-size: 11px;">${detail.code}</span>
-                                            </div>
-                                        ` : ''}
-                                    </div>
-                                `).join('')}
-                            </div>
+                            <h1 class="modal-title">LHDN Submission Error</h1>
+                            <p class="modal-subtitle">Please review the details below</p>
                         </div>
-                    ` : ''}
+                    </div>
+                    <div class="modal-content-section" style="padding: 2rem;">
+                        <div class="error-code-badge">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            ${escapeFallbackHtml(errorCode)}
+                        </div>
+                        <div class="error-message">
+                            <h6><i class="fas fa-exclamation-circle"></i> LHDN Submission Error</h6>
+                            <p>${escapeFallbackHtml(errorMessage)}</p>
+                            ${invoiceContext}
+                        </div>
+                        ${errorDetailsHtml}
+                    </div>
                 </div>
+            `,
+            showConfirmButton: true,
+            confirmButtonText: 'I Understand',
+            width: 640,
+            padding: '0',
+            background: 'transparent',
+            customClass: {
+                popup: 'modern-modal enhanced-error-modal',
+                confirmButton: 'modern-btn modern-btn-success'
+            }
+        });
 
-                ${isTINMatchingError ? tinErrorGuidance : ''}
-            </div>
+        const isDuplicateSubmission =
+            formattedError.code === 'DUPLICATE_SUBMISSION' ||
+            formattedError.code === 'DS302';
 
-            <div class="next-steps-card" style="margin-top: 25px; padding: 15px; border-radius: 8px; background: rgba(255, 193, 7, 0.1); box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                <div style="display: flex; align-items: center; margin-bottom: 12px;">
-                    <i class="fas fa-lightbulb" style="color: #ffc107; margin-right: 8px; font-size: 16px;"></i>
-                    <span style="font-weight: 600; color: #495057; font-size: 13px;">Next Steps</span>
-                </div>
-                <ul style="margin: 0; padding-left: 25px; font-size: 12px; color: #495057;">
-                    ${getNextSteps(mainError.code)}
-                </ul>
-            </div>
-
-            <style>
-                @keyframes pulseError {
-                    0% { transform: scale(1); }
-                    50% { transform: scale(1.1); }
-                    100% { transform: scale(1); }
-                }
-                .tooltip-container:hover .tooltip-content {
-                    display: block;
-                }
-            </style>
-        `,
-        confirmButtonText: 'I Understand',
-        confirmButtonColor: '#3085d6',
-        width: 600,
-        customClass: {
-            confirmButton: 'btn btn-primary'
-        }
-    });
-
-    // Refresh the table if this is a duplicate submission error
-    // This ensures the table is updated even when a document is already submitted
-    if (isDuplicateSubmission) {
-        console.log('Updating table after duplicate submission error');
-        // Extract the filename from the error if possible
-        let fileName = window.currentFileName;
-        if (mainError.target && typeof mainError.target === 'string') {
-            // If target contains the document number, use that to help identify the file
-            fileName = mainError.target;
-        }
-
-        // Use the more efficient single document update instead of full refresh
-        if (fileName) {
-            await updateSingleDocumentStatus(fileName);
-        } else {
-            // Fallback to full refresh if filename not available
+        if (isDuplicateSubmission) {
             InvoiceTableManager.getInstance().refresh();
         }
     }
 }
 
-// Helper function to format validation messages
-function formatValidationMessage(message) {
-    if (!message) return 'Unknown validation error';
+function escapeFallbackHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
 
-    // Enhance common LHDN error messages with more helpful information
-    if (message.includes('authenticated TIN and documents TIN is not matching')) {
-        return `The TIN (Tax Identification Number) in your document doesn't match with the authenticated TIN.
-                Please ensure the supplier's TIN matches exactly with the one registered with LHDN.`;
+function shouldHideErrorCode(code) {
+    const normalized = String(code || '').trim().toUpperCase();
+    return !normalized || normalized === '2' || normalized === 'VALIDATION_ERROR' || normalized === 'VALIDATIONERROR';
+}
+
+function isHiddenFallbackDetail(detail) {
+    if (detail == null) {
+        return true;
     }
 
-    return message;
+    if (typeof detail === 'string') {
+        const lower = detail.trim().toLowerCase();
+        return lower.startsWith('invoicecodenumber')
+            || /^2\s*:\s*validation error$/.test(lower)
+            || lower === 'validation error';
+    }
+
+    if (typeof detail !== 'object') {
+        return true;
+    }
+
+    const code = String(detail.code || '');
+    const message = String(detail.message || '').trim().toLowerCase();
+    if (code === '2' || message === 'validation error') {
+        return true;
+    }
+
+    const keys = Object.keys(detail);
+    if (keys.length === 1 && keys[0] === 'invoiceCodeNumber') {
+        return true;
+    }
+
+    return false;
+}
+
+function getFriendlyFallbackDetails(error) {
+    if (typeof lhdnUIHelper !== 'undefined' && typeof lhdnUIHelper.extractValidationDetails === 'function') {
+        return lhdnUIHelper.extractValidationDetails(error);
+    }
+
+    let details = error && error.details;
+    if (details && typeof details === 'object' && !Array.isArray(details)) {
+        details = details.error && details.error.details ? details.error.details : details;
+    }
+
+    if (!Array.isArray(details)) {
+        return [];
+    }
+
+    return details.filter((detail) => !isHiddenFallbackDetail(detail));
 }
 
 

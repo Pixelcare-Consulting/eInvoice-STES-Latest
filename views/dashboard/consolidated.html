@@ -2967,7 +2967,7 @@
                     <i class="bi bi-shield-check"></i>
                     TIN Validation Results
                 </h5>
-                <button type="button" class="btn-lhdn d-flex align-items-center justify-content-center" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-lhdn d-flex align-items-center justify-content-center" data-bs-dismiss="modal" aria-label="Close"></button>
                
             </div>
             <div class="modal-body">
@@ -2991,7 +2991,8 @@
                     <i class="bi bi-exclamation-triangle"></i>
                     Validation Error
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close">
+                </button>
             </div>
             <div class="modal-body">
                 <div id="validationErrorList">
@@ -3133,8 +3134,8 @@
         <div class="tooltip-step-indicator">
             <span id="currentStepIndicator">1</span>/<span id="totalStepsIndicator">6</span>
         </div>
-        <button type="button" class="tooltip-close-btn" id="closeTourBtn">
-            <i class="bi bi-x"></i>
+        <button type="button" class="tooltip-close-btn" id="closeTourBtn" aria-label="Close tour">
+            <i class="bi bi-x" aria-hidden="true"></i>
         </button>
     </div>
     <div class="tooltip-body">
@@ -3145,15 +3146,15 @@
     </div>
     <div class="tooltip-progress">
         <div class="progress">
-            <div class="progress-bar" id="tourProgressBar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+            <div class="progress-bar" id="tourProgressBar" role="progressbar" aria-label="Tour progress" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
         <div class="step-indicators d-flex justify-content-between px-3 mt-2" id="stepIndicators">
             <!-- Step indicators will be dynamically inserted -->
         </div>
     </div>
     <div class="tooltip-footer">
-        <button type="button" class="tooltip-btn tooltip-btn-prev" id="prevStepBtn" disabled>
-            <i class="bi bi-arrow-left"></i>
+        <button type="button" class="tooltip-btn tooltip-btn-prev" id="prevStepBtn" aria-label="Previous step" disabled>
+            <i class="bi bi-arrow-left" aria-hidden="true"></i>
         </button>
         <button type="button" class="tooltip-btn tooltip-btn-skip" id="skipTourBtn">
             Skip
@@ -3205,6 +3206,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 {% endblock %} 
 {% block scripts %}
+<script src="/assets/utils/lhdnUIHelper.js"></script>
 <script src="/assets/js/modules/excel/outbound-consolidate.js"></script>
 <script src="/assets/js/modules/tutorial/guided-tour.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
