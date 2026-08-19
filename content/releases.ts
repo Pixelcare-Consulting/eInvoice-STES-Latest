@@ -19,6 +19,19 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    version: '1.2.1',
+    date: '2026-08-19',
+    title: 'Portal start after updates',
+    notes: [
+      {
+        type: 'fix',
+        items: [
+          'The portal could fail to start after installing updates. Installing the latest package now completes reliably so the portal can start as expected.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.0',
     date: '2026-08-18',
     title: 'LHDN MyInvois SDK 1.0 compliance',

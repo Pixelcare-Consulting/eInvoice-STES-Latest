@@ -14,6 +14,8 @@ A specialized middleware solution designed to integrate business applications wi
    pnpm install
    ```
 
+   If install fails while generating Prisma files, or the portal cannot start because Prisma runtime files are missing, delete the `node_modules` folder and run `pnpm install` again.
+
 ## Running the Application
 
 ### Development Mode
