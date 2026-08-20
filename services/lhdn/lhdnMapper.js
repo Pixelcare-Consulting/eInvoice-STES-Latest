@@ -543,31 +543,33 @@ const mapToLHDNFormat = (excelData, version) => {
             doc.header.invoiceDocumentReference || doc.header.InvoiceDocumentReference_ID
           );
           const billRef = docRef?.billingReference;
-          const realBillRef = isRealBillReference(billRef) ? billRef : null;
+          const realBillRef = isRealBillReference(billRef) ? String(billRef).trim() : null;
+
+          const entry = {};
 
           if (hasOriginalInvoice) {
-            return [{
-              "InvoiceDocumentReference": [{
-                "ID": wrapValue(doc.header.InvoiceDocumentReference_ID || ""),
-                "UUID": wrapValue(doc.header.invoiceDocumentReference || "")
-              }]
+            entry.InvoiceDocumentReference = [{
+              "ID": wrapValue(doc.header.InvoiceDocumentReference_ID || ""),
+              "UUID": wrapValue(doc.header.invoiceDocumentReference || "")
             }];
           }
 
           if (realBillRef) {
+            entry.AdditionalDocumentReference = [{
+              "ID": wrapValue(realBillRef)
+            }];
+          }
+
+          if (Object.keys(entry).length === 0) {
             return [{
-              "AdditionalDocumentReference": [{
-                "ID": wrapValue(realBillRef)
+              "InvoiceDocumentReference": [{
+                "ID": wrapValue(""),
+                "UUID": wrapValue("")
               }]
             }];
           }
 
-          return [{
-            "InvoiceDocumentReference": [{
-              "ID": wrapValue(""),
-              "UUID": wrapValue("")
-            }]
-          }];
+          return [entry];
         })(),
         "AdditionalDocumentReference": (() => {
           const docRef = doc.header.documentReference;

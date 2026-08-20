@@ -13,7 +13,7 @@ const isPlaceholderRefId = (id) => {
 const isEmptyDocRefValue = (value) => {
   if (value === null || value === undefined) return true;
   const normalized = String(value).trim().toUpperCase();
-  return normalized === '' || normalized === 'NA' || normalized === 'NOT APPLICABLE';
+  return normalized === '' || normalized === 'NA' || normalized === 'N/A' || normalized === 'NOT APPLICABLE';
 };
 
 const classifyAdditionalDocRef = (description) => {

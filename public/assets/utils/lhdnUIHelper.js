@@ -19,7 +19,7 @@ const lhdnUIHelper = (function() {
         'CF406': 'Invalid value. One or more fields contain invalid values.',
         'CF407': 'Document number already exists. Please use a unique document number.',
         'CF414': 'The supplier phone number is too short or invalid.',
-        'CF417': 'Incoterms must be a 3-letter trade term such as FOB, CIF, or EXW.',
+        'CF417': 'Additional Document Reference ID must be at most 3 characters (e.g. CIF, FOB, EXW). Put cert, P/O, and D/O numbers in Document Description.',
         'CF701': 'Business activity description is required.',
         'AUTH001': 'Authentication failed. Please check your credentials.',
         'AUTH002': 'Session expired. Please log in again.',

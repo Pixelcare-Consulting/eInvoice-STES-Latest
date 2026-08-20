@@ -3617,6 +3617,7 @@ async function getTemplateData(uuid, accessToken, user) {
                 .filter(({ id }) => id && !isEmptyDocRefValue(id) && id !== 'Not Applicable');
 
             const cifStyleRefs = parsedRefs.filter(ref => isPlaceholderRefId(ref.id));
+            const slotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
 
             for (const ref of parsedRefs) {
                 const legacySlot = classifyAdditionalDocRef(ref.description);
@@ -3629,36 +3630,24 @@ async function getTemplateData(uuid, accessToken, user) {
                 }
             }
 
-            const valuedCifRefs = cifStyleRefs.filter(
-                ref => !isEmptyDocRefValue(ref.description)
-            );
-
-            for (const ref of valuedCifRefs) {
-                const printedValue = ref.description;
-
-                if (classifyExcelPoPattern(printedValue) && !refsMap['Cust. P/O No.']) {
-                    refsMap['Cust. P/O No.'] = printedValue;
-                } else if (classifyExcelDoPattern(printedValue) && !refsMap['Cust. D/O No.']) {
-                    refsMap['Cust. D/O No.'] = printedValue;
-                }
-            }
-
-            const slotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
-            const slotOffset = Math.max(0, slotOrder.length - valuedCifRefs.length);
-
-            valuedCifRefs.forEach((ref, index) => {
-                const printedValue = ref.description;
-
-                if (classifyExcelPoPattern(printedValue) && refsMap['Cust. P/O No.'] === printedValue) {
-                    return;
-                }
-                if (classifyExcelDoPattern(printedValue) && refsMap['Cust. D/O No.'] === printedValue) {
+            cifStyleRefs.forEach((ref, index) => {
+                if (isEmptyDocRefValue(ref.description)) {
                     return;
                 }
 
-                const targetIndex = slotOffset + index;
-                if (targetIndex < slotOrder.length && !refsMap[slotOrder[targetIndex]]) {
-                    refsMap[slotOrder[targetIndex]] = printedValue;
+                const printedValue = ref.description;
+                let slot = null;
+
+                if (classifyExcelPoPattern(printedValue)) {
+                    slot = 'Cust. P/O No.';
+                } else if (classifyExcelDoPattern(printedValue)) {
+                    slot = 'Cust. D/O No.';
+                } else if (index < slotOrder.length) {
+                    slot = slotOrder[index];
+                }
+
+                if (slot && !refsMap[slot]) {
+                    refsMap[slot] = printedValue;
                 }
             });
 

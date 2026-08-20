@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const { logRawToJson, logLhdnMapping } = require('./excelLogger');
 const { mapToLHDNFormat, assertMaxLength } = require('./lhdnMapper');
-const { isIncotermPlaceholderId } = require('./incotermPlaceholders');
 const { isPlaceholderRefId } = require('./documentReferenceUtils');
 
 /**
