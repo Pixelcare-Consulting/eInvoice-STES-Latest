@@ -346,7 +346,7 @@ const processExcelData = (rawData) => {
       const collectAdditionalDocumentReferences = (headerRow, dataRows, currentIndex) => {
         const additionalRefs = [];
         const invoiceNo = headerRow.Invoice;
-        const seenIds = new Set(); // Track IDs to prevent duplicates
+        const seenKeys = new Set(); // Track id|type|description to prevent duplicates
         
         if (!invoiceNo) {
           return additionalRefs;
@@ -460,23 +460,28 @@ const processExcelData = (rawData) => {
             // Only add if we have at least an ID and it's not a duplicate
             if (additionalDocRef) {
               const refId = String(additionalDocRef).trim();
-              
-              // Skip if we've already seen this ID (prevent duplicates)
-              if (seenIds.has(refId)) {
+              const refType = documentType ? String(documentType).trim() : '';
+              const refDescription = documentDescription ? String(documentDescription).trim() : '';
+              const dedupeKey = `${refId}|${refType}|${refDescription}`;
+
+              // Skip exact duplicates (same id + type + description)
+              if (seenKeys.has(dedupeKey)) {
                 logStep('Skipping duplicate AdditionalDocumentReference', {
                   rowIndex,
-                  id: refId
+                  id: refId,
+                  type: refType,
+                  description: refDescription
                 });
                 return false;
               }
-              
+
               const refEntry = {
                 id: refId,
-                type: documentType ? String(documentType).trim() : '',
-                description: documentDescription ? String(documentDescription).trim() : ''
+                type: refType,
+                description: refDescription
               };
-              
-              seenIds.add(refId);
+
+              seenKeys.add(dedupeKey);
               additionalRefs.push(refEntry);
               
               // Debug logging

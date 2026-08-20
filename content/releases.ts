@@ -19,6 +19,19 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    version: '1.2.2',
+    date: '2026-08-20',
+    title: 'Invoice PDF document references',
+    notes: [
+      {
+        type: 'improvement',
+        items: [
+          'Invoice PDF copies now fill Exemption Certificate, customer purchase order, and delivery order numbers from the extra document-reference lines, including when those numbers are stored in the description field.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.1',
     date: '2026-08-19',
     title: 'Portal start after updates',

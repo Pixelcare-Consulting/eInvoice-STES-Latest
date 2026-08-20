@@ -3440,28 +3440,84 @@ async function getTemplateData(uuid, accessToken, user) {
     const supplierIdInfo = getIdTypeAndNumber(supplierParty.PartyIdentification, idTypes);
     const customerIdInfo = getIdTypeAndNumber(customerParty.PartyIdentification, idTypes);
 
-    // Helper function to get label based on description for AdditionalDocumentReference
-    const getReferenceLabel = (description) => {
-        if (!description || description === 'Not Applicable' || description === 'NA' || description === '') {
-            return 'Additional Document Reference';
+    const getUblFieldText = (obj, ...fieldNames) => {
+        if (!obj) return '';
+        for (const fieldName of fieldNames) {
+            const value = obj[fieldName];
+            if (value === undefined || value === null || value === '') continue;
+            if (typeof value === 'string' || typeof value === 'number') {
+                return String(value).trim();
+            }
+            if (Array.isArray(value) && value.length > 0) {
+                const first = value[0];
+                if (first && typeof first === 'object' && first._ !== undefined && first._ !== null) {
+                    return String(first._).trim();
+                }
+                if (typeof first === 'string' || typeof first === 'number') {
+                    return String(first).trim();
+                }
+            }
+            if (typeof value === 'object' && value._ !== undefined && value._ !== null) {
+                return String(value._).trim();
+            }
         }
+        return '';
+    };
+
+    const getRefText = (ref) => ({
+        id: getUblFieldText(ref, 'ID', 'Id', 'id'),
+        type: getUblFieldText(ref, 'DocumentType', 'documentType'),
+        description: getUblFieldText(ref, 'DocumentDescription', 'documentDescription')
+    });
+
+    const INCOTERM_PLACEHOLDER_IDS = new Set([
+        'CIF', 'FOB', 'EXW', 'CFR', 'DDP', 'DAP', 'CIP', 'CPT', 'FCA', 'FAS', 'DPU'
+    ]);
+
+    const isPlaceholderRefId = (id) => {
+        if (!id) return false;
+        const normalized = String(id).trim().toUpperCase();
+        return INCOTERM_PLACEHOLDER_IDS.has(normalized) || normalized.length <= 3;
+    };
+
+    const classifyAdditionalDocRef = (description) => {
+        if (!description) return null;
         const descUpper = description.toUpperCase();
+
         if (descUpper.includes('EXEMP')) {
             return 'Exemption Cert. No.';
-        } else if (descUpper.includes('PO') || descUpper.includes('PURCHASE')) {
-            return 'Cust. P/O No.';
-        } else if (descUpper.includes('DO') || descUpper.includes('DELIVERY')) {
-            return 'Cust. D/O No.';
-        } else if (descUpper.includes('INVOICE')) {
-            return 'Invoice Reference No.';
-        } else if (descUpper.includes('QUOTE') || descUpper.includes('QUOTATION')) {
-            return 'Quotation Reference No.';
-        } else if (descUpper.includes('CONTRACT')) {
-            return 'Contract Reference No.';
-        } else {
-            // Use description as label if no match
-            return description;
         }
+
+        if (/\bP\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('P.O') ||
+            descUpper.includes('PO NO') || descUpper.includes('PURCHASE ORDER')) {
+            return 'Cust. P/O No.';
+        }
+
+        if (!descUpper.includes('DOCUMENT')) {
+            if (/\bD\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('D.O') ||
+                descUpper.includes('DO NO') || descUpper.includes('DELIVERY ORDER')) {
+                return 'Cust. D/O No.';
+            }
+        }
+
+        return null;
+    };
+
+    const classifyExcelPoPattern = (description) => {
+        if (!description) return false;
+        const descUpper = description.toUpperCase();
+        return /\bP\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('P.O') ||
+            /^PO[-\s]/i.test(description) || descUpper.includes('PO NO') ||
+            descUpper.includes('PURCHASE ORDER');
+    };
+
+    const classifyExcelDoPattern = (description) => {
+        if (!description) return false;
+        const descUpper = description.toUpperCase();
+        if (descUpper.includes('DOCUMENT')) return false;
+        return /\bD\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('D.O') ||
+            /^DO[-\s]/i.test(description) || descUpper.includes('DO NO') ||
+            descUpper.includes('DELIVERY ORDER');
     };
 
     // Process tax information for each line item
@@ -3589,59 +3645,61 @@ async function getTemplateData(uuid, accessToken, user) {
         // Extract AdditionalDocumentReference entries from LHDN API response
         // Always show all three fields: Exemption Cert. No., Cust. P/O No., Cust. D/O No.
         additionalDocumentReferences: (() => {
-            // Initialize the three required fields
             const refsMap = {
                 'Exemption Cert. No.': null,
                 'Cust. P/O No.': null,
                 'Cust. D/O No.': null
             };
+            const leftoverSlotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
 
-            // Process all AdditionalDocumentReference entries from API
-            (invoice.AdditionalDocumentReference || []).forEach(ref => {
-                const id = ref.ID?.[0]?._ || '';
-                const documentType = ref.DocumentType?.[0]?._ || '';
-                const documentDescription = ref.DocumentDescription?.[0]?._ || '';
-                
-                // Only process if ID is valid and not "NA"
-                if (id && id !== 'Not Applicable' && id !== 'NA' && id !== '') {
-                    const descUpper = (documentDescription || '').toUpperCase();
-                    
-                    // Categorize based on description (case-insensitive matching)
-                    if (descUpper.includes('EXEMP')) {
-                        // Exemption Cert - only set if not already set
-                        if (!refsMap['Exemption Cert. No.']) {
-                            refsMap['Exemption Cert. No.'] = id;
-                        }
-                    } else if (descUpper.includes('PO') || descUpper.includes('PURCHASE')) {
-                        // Purchase Order - only set if not already set
-                        if (!refsMap['Cust. P/O No.']) {
-                            refsMap['Cust. P/O No.'] = id;
-                        }
-                    } else if (descUpper.includes('DO') || descUpper.includes('DELIVERY')) {
-                        // Delivery Order - only set if not already set
-                        if (!refsMap['Cust. D/O No.']) {
-                            refsMap['Cust. D/O No.'] = id;
-                        }
+            const rawRefs = invoice.AdditionalDocumentReference ||
+                invoice.additionalDocumentReference ||
+                [];
+
+            const parsedRefs = rawRefs
+                .map(ref => getRefText(ref))
+                .filter(({ id }) => id && id !== 'Not Applicable' && id !== 'NA' && id !== '');
+
+            const excelStyleRefs = [];
+
+            for (const ref of parsedRefs) {
+                const legacySlot = classifyAdditionalDocRef(ref.description);
+
+                // Legacy: description is the label, ID holds the printed value
+                if (legacySlot && !isPlaceholderRefId(ref.id)) {
+                    if (!refsMap[legacySlot]) {
+                        refsMap[legacySlot] = ref.id;
                     }
-                    // Ignore other types to prevent duplicates
+                    continue;
                 }
-            });
 
-            // Always return all three fields in order, with "Not Applicable" if empty
-            return [
-                {
-                    label: 'Exemption Cert. No.',
-                    id: refsMap['Exemption Cert. No.'] || 'Not Applicable'
-                },
-                {
-                    label: 'Cust. P/O No.',
-                    id: refsMap['Cust. P/O No.'] || 'Not Applicable'
-                },
-                {
-                    label: 'Cust. D/O No.',
-                    id: refsMap['Cust. D/O No.'] || 'Not Applicable'
+                // Excel style: placeholder ID with the real number in DocumentDescription
+                if (isPlaceholderRefId(ref.id) && ref.description) {
+                    excelStyleRefs.push(ref);
                 }
-            ];
+            }
+
+            for (const ref of excelStyleRefs) {
+                const printedValue = ref.description;
+                let slot = null;
+
+                if (classifyExcelPoPattern(ref.description)) {
+                    slot = 'Cust. P/O No.';
+                } else if (classifyExcelDoPattern(ref.description)) {
+                    slot = 'Cust. D/O No.';
+                } else {
+                    slot = leftoverSlotOrder.find(label => !refsMap[label]) || null;
+                }
+
+                if (slot && !refsMap[slot]) {
+                    refsMap[slot] = printedValue;
+                }
+            }
+
+            return leftoverSlotOrder.map(label => ({
+                label,
+                id: refsMap[label] || 'Not Applicable'
+            }));
         })(),
 
         SupplierTIN: supplierParty.PartyIdentification?.find(id => id.ID[0].schemeID === 'TIN')?.ID[0]._ || 'NA',
@@ -3845,7 +3903,7 @@ router.post('/documents/:uuid/pdf', async (req, res) => {
         console.log(`[${requestId}] Generating new PDF...`);
         const newHash = generateTemplateHash(templateData);
 
-        const templatePath = path.join(__dirname, '../../src/reports/original-invoice-template.html');
+        const templatePath = path.join(__dirname, '../../src/reports/custom-original-invoice-template.html');
         console.log(`[${requestId}] Using template:`, templatePath);
 
         const templateContent = await fsPromises.readFile(templatePath, 'utf8');
