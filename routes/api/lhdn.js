@@ -22,6 +22,13 @@ const cache = new NodeCache({ stdTTL: 300 }); // 5 minutes in seconds
 // Database models
 const prisma = require('../../src/lib/prisma');
 const { LoggingService, LOG_TYPES, MODULES, ACTIONS, STATUS } = require('../../services/logging-prisma.service');
+const {
+    isPlaceholderRefId,
+    isEmptyDocRefValue,
+    classifyAdditionalDocRef,
+    classifyExcelPoPattern,
+    classifyExcelDoPattern
+} = require('../../services/lhdn/documentReferenceUtils');
 
 // Helper function for delays
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -3470,56 +3477,6 @@ async function getTemplateData(uuid, accessToken, user) {
         description: getUblFieldText(ref, 'DocumentDescription', 'documentDescription')
     });
 
-    const INCOTERM_PLACEHOLDER_IDS = new Set([
-        'CIF', 'FOB', 'EXW', 'CFR', 'DDP', 'DAP', 'CIP', 'CPT', 'FCA', 'FAS', 'DPU'
-    ]);
-
-    const isPlaceholderRefId = (id) => {
-        if (!id) return false;
-        const normalized = String(id).trim().toUpperCase();
-        return INCOTERM_PLACEHOLDER_IDS.has(normalized) || normalized.length <= 3;
-    };
-
-    const classifyAdditionalDocRef = (description) => {
-        if (!description) return null;
-        const descUpper = description.toUpperCase();
-
-        if (descUpper.includes('EXEMP')) {
-            return 'Exemption Cert. No.';
-        }
-
-        if (/\bP\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('P.O') ||
-            descUpper.includes('PO NO') || descUpper.includes('PURCHASE ORDER')) {
-            return 'Cust. P/O No.';
-        }
-
-        if (!descUpper.includes('DOCUMENT')) {
-            if (/\bD\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('D.O') ||
-                descUpper.includes('DO NO') || descUpper.includes('DELIVERY ORDER')) {
-                return 'Cust. D/O No.';
-            }
-        }
-
-        return null;
-    };
-
-    const classifyExcelPoPattern = (description) => {
-        if (!description) return false;
-        const descUpper = description.toUpperCase();
-        return /\bP\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('P.O') ||
-            /^PO[-\s]/i.test(description) || descUpper.includes('PO NO') ||
-            descUpper.includes('PURCHASE ORDER');
-    };
-
-    const classifyExcelDoPattern = (description) => {
-        if (!description) return false;
-        const descUpper = description.toUpperCase();
-        if (descUpper.includes('DOCUMENT')) return false;
-        return /\bD\s*\/?\s*O\b/.test(descUpper) || descUpper.includes('D.O') ||
-            /^DO[-\s]/i.test(description) || descUpper.includes('DO NO') ||
-            descUpper.includes('DELIVERY ORDER');
-    };
-
     // Process tax information for each line item
     const taxSummary = {};
     const items = await Promise.all(invoice.InvoiceLine?.map(async (line, index) => {
@@ -3650,7 +3607,6 @@ async function getTemplateData(uuid, accessToken, user) {
                 'Cust. P/O No.': null,
                 'Cust. D/O No.': null
             };
-            const leftoverSlotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
 
             const rawRefs = invoice.AdditionalDocumentReference ||
                 invoice.additionalDocumentReference ||
@@ -3658,9 +3614,9 @@ async function getTemplateData(uuid, accessToken, user) {
 
             const parsedRefs = rawRefs
                 .map(ref => getRefText(ref))
-                .filter(({ id }) => id && id !== 'Not Applicable' && id !== 'NA' && id !== '');
+                .filter(({ id }) => id && !isEmptyDocRefValue(id) && id !== 'Not Applicable');
 
-            const excelStyleRefs = [];
+            const cifStyleRefs = parsedRefs.filter(ref => isPlaceholderRefId(ref.id));
 
             for (const ref of parsedRefs) {
                 const legacySlot = classifyAdditionalDocRef(ref.description);
@@ -3670,33 +3626,43 @@ async function getTemplateData(uuid, accessToken, user) {
                     if (!refsMap[legacySlot]) {
                         refsMap[legacySlot] = ref.id;
                     }
-                    continue;
-                }
-
-                // Excel style: placeholder ID with the real number in DocumentDescription
-                if (isPlaceholderRefId(ref.id) && ref.description) {
-                    excelStyleRefs.push(ref);
                 }
             }
 
-            for (const ref of excelStyleRefs) {
+            const valuedCifRefs = cifStyleRefs.filter(
+                ref => !isEmptyDocRefValue(ref.description)
+            );
+
+            for (const ref of valuedCifRefs) {
                 const printedValue = ref.description;
-                let slot = null;
 
-                if (classifyExcelPoPattern(ref.description)) {
-                    slot = 'Cust. P/O No.';
-                } else if (classifyExcelDoPattern(ref.description)) {
-                    slot = 'Cust. D/O No.';
-                } else {
-                    slot = leftoverSlotOrder.find(label => !refsMap[label]) || null;
-                }
-
-                if (slot && !refsMap[slot]) {
-                    refsMap[slot] = printedValue;
+                if (classifyExcelPoPattern(printedValue) && !refsMap['Cust. P/O No.']) {
+                    refsMap['Cust. P/O No.'] = printedValue;
+                } else if (classifyExcelDoPattern(printedValue) && !refsMap['Cust. D/O No.']) {
+                    refsMap['Cust. D/O No.'] = printedValue;
                 }
             }
 
-            return leftoverSlotOrder.map(label => ({
+            const slotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
+            const slotOffset = Math.max(0, slotOrder.length - valuedCifRefs.length);
+
+            valuedCifRefs.forEach((ref, index) => {
+                const printedValue = ref.description;
+
+                if (classifyExcelPoPattern(printedValue) && refsMap['Cust. P/O No.'] === printedValue) {
+                    return;
+                }
+                if (classifyExcelDoPattern(printedValue) && refsMap['Cust. D/O No.'] === printedValue) {
+                    return;
+                }
+
+                const targetIndex = slotOffset + index;
+                if (targetIndex < slotOrder.length && !refsMap[slotOrder[targetIndex]]) {
+                    refsMap[slotOrder[targetIndex]] = printedValue;
+                }
+            });
+
+            return slotOrder.map(label => ({
                 label,
                 id: refsMap[label] || 'Not Applicable'
             }));

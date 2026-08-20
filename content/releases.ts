@@ -19,6 +19,19 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    version: '1.2.3',
+    date: '2026-08-20',
+    title: 'Invoice reference submission and PDF',
+    notes: [
+      {
+        type: 'fix',
+        items: [
+          'Exemption certificate, customer purchase order, and delivery order numbers are now sent correctly to LHDN and appear on invoice PDF copies instead of showing blank or NA.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.2',
     date: '2026-08-20',
     title: 'Invoice PDF document references',

@@ -1,6 +1,11 @@
 const fs = require('fs');
 const path = require('path');
 const { getCertificatesHashedParams } = require('./lhdnService');
+const {
+  normalizeSubmitDocRef,
+  isPlaceholderRefId,
+  isRealBillReference
+} = require('./documentReferenceUtils');
 
 /**
  * Logger configuration for mapping process
@@ -532,55 +537,57 @@ const mapToLHDNFormat = (excelData, version) => {
           "EndDate": wrapValue(doc.header.invoicePeriod.endDate),
           "Description": wrapValue(doc.header.invoicePeriod.description)
         }],
-        "BillingReference": doc.header.documentReference?.billingReference ? [{
-          "InvoiceDocumentReference": [{
-            "ID": wrapValue(doc.header.InvoiceDocumentReference_ID || ""),
-            "UUID": wrapValue(doc.header.invoiceDocumentReference || "")
-          }],
-        }] : [{
-          "AdditionalDocumentReference": [
-            mapDocumentReference({
-              id: doc.header.documentReference?.billingReference || "",
-              type: doc.header.documentReference?.billingReferenceType || ""
-            }),
-            ...(doc.header.documentReference?.additionalRefs || [])
-              .map(ref => mapDocumentReference(ref))
-              .filter(Boolean)
-          ],
-        }],
+        "BillingReference": (() => {
+          const docRef = doc.header.documentReference;
+          const hasOriginalInvoice = Boolean(
+            doc.header.invoiceDocumentReference || doc.header.InvoiceDocumentReference_ID
+          );
+          const billRef = docRef?.billingReference;
+          const realBillRef = isRealBillReference(billRef) ? billRef : null;
+
+          if (hasOriginalInvoice) {
+            return [{
+              "InvoiceDocumentReference": [{
+                "ID": wrapValue(doc.header.InvoiceDocumentReference_ID || ""),
+                "UUID": wrapValue(doc.header.invoiceDocumentReference || "")
+              }]
+            }];
+          }
+
+          if (realBillRef) {
+            return [{
+              "AdditionalDocumentReference": [{
+                "ID": wrapValue(realBillRef)
+              }]
+            }];
+          }
+
+          return [{
+            "InvoiceDocumentReference": [{
+              "ID": wrapValue(""),
+              "UUID": wrapValue("")
+            }]
+          }];
+        })(),
         "AdditionalDocumentReference": (() => {
-          // Collect all AdditionalDocumentReference entries
-          const allRefs = [];
-          
-          // Add additionalRefs (excluding duplicates with billingReference)
-          if (doc.header.documentReference?.additionalRefs && doc.header.documentReference.additionalRefs.length > 0) {
-            const billingRef = doc.header.documentReference?.billingReference;
-            doc.header.documentReference.additionalRefs
-              .filter(ref => {
-                // Exclude if this ref matches billingReference (to avoid duplication)
-                return !billingRef || ref.id !== billingRef;
-              })
-              .forEach(ref => {
-                allRefs.push(mapDocumentReference(ref));
-              });
-          }
-          
-          // Add billingReference as the first entry if it exists and has a value
-          if (doc.header.documentReference?.billingReference && 
-              doc.header.documentReference.billingReference !== 'NA' &&
-              doc.header.documentReference.billingReference !== '') {
-            allRefs.unshift(mapDocumentReference({
-              id: doc.header.documentReference.billingReference,
-              type: doc.header.documentReference.billingReferenceType || "",
-              description: doc.header.documentReference.additionalRefs?.find(ref => ref.id === doc.header.documentReference.billingReference)?.description || ""
-            }));
-          }
-          
-          // Filter out any null/undefined entries
-          const validRefs = allRefs.filter(Boolean);
-          
-          // If array is empty, add a default entry with "NA" to satisfy LHDN validation
-          // LHDN requires at least one entry in AdditionalDocumentReference array
+          const docRef = doc.header.documentReference;
+          const billingRef = docRef?.billingReference;
+          const additionalRefs = docRef?.additionalRefs || [];
+
+          const validRefs = additionalRefs
+            .filter(ref => {
+              if (!billingRef || billingRef === 'NA' || billingRef === '') {
+                return true;
+              }
+              if (isPlaceholderRefId(billingRef)) {
+                return true;
+              }
+              return ref.id !== billingRef;
+            })
+            .map(normalizeSubmitDocRef)
+            .filter(Boolean)
+            .map(mapDocumentReference);
+
           if (validRefs.length === 0) {
             return [mapDocumentReference({
               id: "NA",
@@ -588,7 +595,7 @@ const mapToLHDNFormat = (excelData, version) => {
               description: ""
             })];
           }
-          
+
           return validRefs;
         })(),
         "AccountingSupplierParty": [{

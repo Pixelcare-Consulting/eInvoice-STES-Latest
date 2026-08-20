@@ -2,6 +2,8 @@ const fs = require('fs');
 const path = require('path');
 const { logRawToJson, logLhdnMapping } = require('./excelLogger');
 const { mapToLHDNFormat, assertMaxLength } = require('./lhdnMapper');
+const { isIncotermPlaceholderId } = require('./incotermPlaceholders');
+const { isPlaceholderRefId } = require('./documentReferenceUtils');
 
 /**
  * Constants for Excel field mapping and default values
@@ -814,7 +816,13 @@ const processExcelData = (rawData) => {
             documentReference: {
               uuid: getField(headerRow, '1') || '',
               internalId: getField(headerRow, '2') || '',
-              billingReference: headerRow.AdditionalDocumentReference || DEFAULT_VALUES.NOT_APPLICABLE,
+              billingReference: (() => {
+                const rawBillingRef = String(headerRow.AdditionalDocumentReference || '').trim();
+                if (!rawBillingRef || isPlaceholderRefId(rawBillingRef)) {
+                  return DEFAULT_VALUES.NOT_APPLICABLE;
+                }
+                return rawBillingRef;
+              })(),
               billingReferenceType: getField(headerRow, '11') || DEFAULT_VALUES.NOT_APPLICABLE,
               additionalRefs: additionalRefs
             },

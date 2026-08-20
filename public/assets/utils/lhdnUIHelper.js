@@ -43,10 +43,10 @@ const lhdnUIHelper = (function() {
             nextStep: 'Open your Excel file and fill in the supplier Business activity description (column 15 / MSIC name), then resubmit.'
         },
         'CF417': {
-            field: 'Incoterms',
-            issue: 'Incoterms must be 3 letters (FOB, CIF, or EXW).',
-            meaning: 'LHDN treated an Additional Document Reference with an empty document type as Incoterms.',
-            nextStep: 'Fill in the Additional Document Reference type, or enter a valid 3-letter Incoterm such as FOB, CIF, or EXW, then resubmit.'
+            field: 'Incoterms / Additional Document Reference ID',
+            issue: 'Additional Document Reference ID exceeds the 3-character Incoterms limit.',
+            meaning: 'LHDN treats references with an empty or unknown document type as Incoterms (FOB, CIF, EXW). Incoterms IDs must be at most 3 characters.',
+            nextStep: 'For exemption certificate, customer P/O, and D/O numbers, use a 3-letter placeholder such as CIF in the ID field and put the actual number in Document Description. Do not use BR as the document type. For a real bill reference, enter the full bill number in the billing reference field instead of the additional document reference ID.'
         },
         'CF414': {
             field: 'Supplier phone number',
