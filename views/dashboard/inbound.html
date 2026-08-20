@@ -611,6 +611,8 @@
             <div class="card shadow-sm">
               <div class="card-body">
                 <h6 class="card-title d-flex align-items-center">
+                  <i class="bi bi-pie-chart-fill me-2"></i>
+                  Document Status Distribution
                 </h6>
 
                 <canvas id="documentStatusChart" height="200"></canvas>
@@ -629,6 +631,8 @@
             <div class="card shadow-sm">
               <div class="card-body">
                 <h6 class="card-title d-flex align-items-center">
+                  <i class="bi bi-graph-up me-2"></i>
+                  Daily Submissions
                 </h6>
 
                 <canvas id="dailySubmissionsChart" height="200"></canvas>
@@ -647,6 +651,8 @@
             <div class="card shadow-sm">
               <div class="card-body">
                 <h6 class="card-title d-flex align-items-center">
+                  <i class="bi bi-bar-chart-fill me-2"></i>
+                  Processing Time
                 </h6>
 
                 <canvas id="processingTimeChart" height="200"></canvas>
@@ -670,7 +676,7 @@
     <div class="table-card">
         <div class="table-header">
             <div class="table-header-content">
-                <h2 class="table-title"></h2>
+                <h2 class="table-title">Inbound Document List</h2>
                 <div class="table-actions">
                     <!-- Data Source Toggle -->
                     <div class="btn-group me-2" role="group" aria-label="Data source toggle">
@@ -1006,6 +1012,14 @@
 
                 <!-- Right Side - PDF Viewer -->
                 <div class="pdf-section">
+                    <div class="pdf-toolbar d-none" id="pdfToolbar">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="regeneratePdfBtn" title="Regenerate PDF from latest LHDN data">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Regenerate PDF
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="printPdfBtn" title="Open PDF in a new tab to print">
+                            <i class="bi bi-printer me-1"></i>Print
+                        </button>
+                    </div>
                     <div class="pdf-viewer-container">
                         <div class="loading-container" id="loadingSpinner">
                             <div class="spinner-border" role="status">
@@ -1013,7 +1027,7 @@
                             </div>
                             <div class="loading-text">Loading PDF...</div>
                         </div>
-                        <iframe id="pdfViewer" style="display: none;"></iframe>
+                        <iframe id="pdfViewer" title="Inbound invoice PDF preview" style="display: none;"></iframe>
                     </div>
                 </div>
             </div>

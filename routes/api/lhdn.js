@@ -26,6 +26,7 @@ const {
     isEmptyDocRefValue,
     mapAdditionalDocRefsToPdfSlots
 } = require('../../services/lhdn/documentReferenceUtils');
+const { generateTemplateHash } = require('../../services/lhdn/pdfTemplateHash');
 
 // Helper function for delays
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -879,32 +880,6 @@ async function getCachedDocuments(req) {
 
     return data;
 }
-
-const generateTemplateHash = (templateData) => {
-    const crypto = require('crypto');
-    // Create a string of key data that should trigger regeneration when changed
-    const keyData = JSON.stringify({
-        logo: templateData.CompanyLogo,
-        companyInfo: {
-            name: templateData.companyName,
-            address: templateData.companyAddress,
-            phone: templateData.companyPhone,
-            email: templateData.companyEmail
-        },
-        documentInfo: {
-            type: templateData.InvoiceType,
-            code: templateData.InvoiceCode,
-            uuid: templateData.UniqueIdentifier
-        },
-        items: templateData.items,
-        totals: {
-            subtotal: templateData.Subtotal,
-            tax: templateData.TotalTaxAmount,
-            total: templateData.TotalPayableAmount
-        }
-    });
-    return crypto.createHash('md5').update(keyData).digest('hex');
-};
 
 // Helper function to generate JSON response file
 const generateResponseFile = async (item, req = null) => {

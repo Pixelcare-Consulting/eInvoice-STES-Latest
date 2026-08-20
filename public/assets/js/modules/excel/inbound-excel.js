@@ -3147,14 +3147,20 @@ function formatAddressFromParts(address) {
     return parts.length > 0 ? parts.join(', ') : 'N/A';
 }
 
-async function loadPDF(uuid, documentData) {
+async function loadPDF(uuid, documentData, options = {}) {
+    const forceRegenerate = options.force === true;
+
     // Only proceed if document is Valid or Cancelled
     if (!['Valid', 'Cancelled'].includes(documentData.documentInfo.status)) {
         console.log('PDF generation skipped - document status:', documentData.documentInfo.status);
         return;
     }
 
+    window._currentPdfContext = { uuid, documentData };
+
     try {
+        hidePdfToolbar();
+
         // Initial loading state with progress container
         $('.pdf-viewer-container').html(`
             <div class="d-flex flex-column align-items-center justify-content-center h-100">
@@ -3174,10 +3180,14 @@ async function loadPDF(uuid, documentData) {
             $('#pdf-status-message').text(detailMessage);
         };
 
-        updateStatus('Checking PDF status...', 'Looking for existing PDF file');
+        updateStatus('Checking PDF status...', forceRegenerate ? 'Forcing PDF regeneration' : 'Looking for existing PDF file');
+
+        const pdfEndpoint = forceRegenerate
+            ? `/api/lhdn/documents/${uuid}/pdf?force=true`
+            : `/api/lhdn/documents/${uuid}/pdf`;
 
         // Try to get PDF
-        const response = await fetch(`/api/lhdn/documents/${uuid}/pdf`, {
+        const response = await fetch(pdfEndpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -3201,6 +3211,7 @@ async function loadPDF(uuid, documentData) {
         // Load the PDF
         const timestamp = new Date().getTime();
         const pdfUrl = `${data.url}?t=${timestamp}`;
+        window._currentPdfUrl = pdfUrl;
 
         // Show final status before loading PDF viewer
         updateStatus(data.message || 'Loading PDF viewer...', 'Almost done');
@@ -3213,8 +3224,11 @@ async function loadPDF(uuid, documentData) {
             <iframe id="pdfViewer" class="w-100 h-100" style="border: none;" src="${pdfUrl}"></iframe>
         `);
 
+        showPdfToolbar();
+
     } catch (error) {
         console.error('Error loading PDF:', error);
+        hidePdfToolbar();
         // Document/format unsupported for PDF (e.g. raw XML that can't be parsed for PDF generation)
         const isUnsupported = /Unexpected token|is not valid JSON|Failed to generate PDF.*JSON/i.test(error.message);
         const message = isUnsupported
@@ -3223,7 +3237,7 @@ async function loadPDF(uuid, documentData) {
         const alertClass = isUnsupported ? 'alert-info' : 'alert-danger';
         const iconClass = isUnsupported ? 'bi-info-circle' : 'bi-exclamation-triangle';
         const retryBtn = isUnsupported ? '' : `
-                <button class="btn btn-outline-danger btn-sm ms-3" onclick="loadPDF('${uuid}', ${JSON.stringify(documentData)})">
+                <button class="btn btn-outline-danger btn-sm ms-3" onclick="loadPDF(window._currentPdfContext.uuid, window._currentPdfContext.documentData)">
                     <i class="bi bi-arrow-clockwise me-1"></i>Retry
                 </button>`;
 
@@ -3253,6 +3267,78 @@ async function loadPDF(uuid, documentData) {
         }
     }
 }
+
+function showPdfToolbar() {
+    const toolbar = document.getElementById('pdfToolbar');
+    if (toolbar) {
+        toolbar.classList.remove('d-none');
+    }
+}
+
+function hidePdfToolbar() {
+    const toolbar = document.getElementById('pdfToolbar');
+    if (toolbar) {
+        toolbar.classList.add('d-none');
+    }
+}
+
+async function regeneratePDF() {
+    const context = window._currentPdfContext;
+    if (!context?.uuid || !context?.documentData) {
+        return;
+    }
+
+    const regenerateBtn = document.getElementById('regeneratePdfBtn');
+    if (regenerateBtn) {
+        regenerateBtn.disabled = true;
+    }
+
+    try {
+        await loadPDF(context.uuid, context.documentData, { force: true });
+    } finally {
+        if (regenerateBtn) {
+            regenerateBtn.disabled = false;
+        }
+    }
+}
+
+function printPDF() {
+    const pdfUrl = window._currentPdfUrl;
+    if (!pdfUrl) {
+        Swal.fire({
+            icon: 'info',
+            title: 'PDF Not Ready',
+            text: 'Please wait for the PDF to finish loading before printing.',
+            confirmButtonColor: '#405189'
+        });
+        return;
+    }
+
+    const printWindow = window.open(pdfUrl, '_blank', 'noopener,noreferrer');
+    if (!printWindow) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Pop-up Blocked',
+            text: 'Allow pop-ups for this site to print the PDF.',
+            confirmButtonColor: '#405189'
+        });
+        return;
+    }
+
+    printWindow.addEventListener('load', () => {
+        printWindow.focus();
+        printWindow.print();
+    });
+}
+
+window.loadPDF = loadPDF;
+window.regeneratePDF = regeneratePDF;
+window.printPDF = printPDF;
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('regeneratePdfBtn')?.addEventListener('click', regeneratePDF);
+    document.getElementById('printPdfBtn')?.addEventListener('click', printPDF);
+});
 
 async function openValidationResultsModal(uuid) {
     try {

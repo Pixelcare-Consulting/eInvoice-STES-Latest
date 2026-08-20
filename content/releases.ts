@@ -19,6 +19,25 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    version: '1.2.5',
+    date: '2026-08-20',
+    title: 'Invoice PDF refresh',
+    notes: [
+      {
+        type: 'fix',
+        items: [
+          'Invoice PDF copies now refresh correctly after you resubmit an invoice, so reference numbers match what LHDN has on file.',
+        ],
+      },
+      {
+        type: 'improvement',
+        items: [
+          'Document Details now includes Regenerate PDF and Print buttons for a more reliable PDF copy.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.4',
     date: '2026-08-20',
     title: 'Invoice PDF reference order',
