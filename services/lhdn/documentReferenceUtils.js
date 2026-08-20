@@ -4,6 +4,12 @@ const INCOTERM_PLACEHOLDER_IDS = new Set([
 
 const CERT_PO_DO_DOCUMENT_TYPE = 'Reference';
 
+const PDF_DOC_REF_SLOTS = [
+  'Exemption Cert. No.',
+  'Cust. P/O No.',
+  'Cust. D/O No.'
+];
+
 const isPlaceholderRefId = (id) => {
   if (!id) return false;
   const normalized = String(id).trim().toUpperCase();
@@ -74,6 +80,14 @@ const normalizeSubmitDocRef = (ref) => {
     printedValue = id;
   }
 
+  if ((!printedValue || isEmptyDocRefValue(printedValue)) && isPlaceholderRefId(id)) {
+    return {
+      id: id.toUpperCase(),
+      type: CERT_PO_DO_DOCUMENT_TYPE,
+      description: 'NA'
+    };
+  }
+
   if (!printedValue || isEmptyDocRefValue(printedValue)) {
     return null;
   }
@@ -86,6 +100,45 @@ const normalizeSubmitDocRef = (ref) => {
   };
 };
 
+const mapAdditionalDocRefsToPdfSlots = (parsedRefs) => {
+  const refsMap = {
+    'Exemption Cert. No.': null,
+    'Cust. P/O No.': null,
+    'Cust. D/O No.': null
+  };
+
+  for (const ref of parsedRefs) {
+    const legacySlot = classifyAdditionalDocRef(ref.description);
+    if (legacySlot && !isPlaceholderRefId(ref.id)) {
+      if (!refsMap[legacySlot]) {
+        refsMap[legacySlot] = ref.id;
+      }
+    }
+  }
+
+  const cifStyleRefs = parsedRefs.filter(ref => isPlaceholderRefId(ref.id));
+
+  cifStyleRefs.forEach((ref, index) => {
+    if (index >= PDF_DOC_REF_SLOTS.length) {
+      return;
+    }
+
+    const slot = PDF_DOC_REF_SLOTS[index];
+    if (refsMap[slot]) {
+      return;
+    }
+
+    refsMap[slot] = isEmptyDocRefValue(ref.description)
+      ? 'Not Applicable'
+      : ref.description;
+  });
+
+  return PDF_DOC_REF_SLOTS.map(label => ({
+    label,
+    id: refsMap[label] || 'Not Applicable'
+  }));
+};
+
 const isRealBillReference = (value) => {
   if (!value || isEmptyDocRefValue(value)) return false;
   return !isPlaceholderRefId(value);
@@ -93,6 +146,7 @@ const isRealBillReference = (value) => {
 
 module.exports = {
   CERT_PO_DO_DOCUMENT_TYPE,
+  PDF_DOC_REF_SLOTS,
   INCOTERM_PLACEHOLDER_IDS,
   isPlaceholderRefId,
   isEmptyDocRefValue,
@@ -100,5 +154,6 @@ module.exports = {
   classifyExcelPoPattern,
   classifyExcelDoPattern,
   normalizeSubmitDocRef,
+  mapAdditionalDocRefsToPdfSlots,
   isRealBillReference
 };

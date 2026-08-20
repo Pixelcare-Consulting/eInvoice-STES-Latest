@@ -19,6 +19,19 @@ export interface ReleaseNote {
  */
 export const releases: ReleaseNote[] = [
   {
+    version: '1.2.4',
+    date: '2026-08-20',
+    title: 'Invoice PDF reference order',
+    notes: [
+      {
+        type: 'fix',
+        items: [
+          'Invoice PDF copies now show exemption certificate, customer purchase order, and delivery order numbers in the same order as entered in SAP, including when the first line is marked NA.',
+        ],
+      },
+    ],
+  },
+  {
     version: '1.2.3',
     date: '2026-08-20',
     title: 'Invoice reference submission and PDF',

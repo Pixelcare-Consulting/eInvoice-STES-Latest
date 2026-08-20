@@ -23,11 +23,8 @@ const cache = new NodeCache({ stdTTL: 300 }); // 5 minutes in seconds
 const prisma = require('../../src/lib/prisma');
 const { LoggingService, LOG_TYPES, MODULES, ACTIONS, STATUS } = require('../../services/logging-prisma.service');
 const {
-    isPlaceholderRefId,
     isEmptyDocRefValue,
-    classifyAdditionalDocRef,
-    classifyExcelPoPattern,
-    classifyExcelDoPattern
+    mapAdditionalDocRefsToPdfSlots
 } = require('../../services/lhdn/documentReferenceUtils');
 
 // Helper function for delays
@@ -3599,63 +3596,11 @@ async function getTemplateData(uuid, accessToken, user) {
         OriginalInvoiceEndDate: invoice.InvoicePeriod?.[0]?.EndDate?.[0]._ || '-- / -- / --',
         OriginalInvoiceDescription: invoice.InvoicePeriod?.[0]?.Description?.[0]._ || '',
 
-        // Extract AdditionalDocumentReference entries from LHDN API response
-        // Always show all three fields: Exemption Cert. No., Cust. P/O No., Cust. D/O No.
-        additionalDocumentReferences: (() => {
-            const refsMap = {
-                'Exemption Cert. No.': null,
-                'Cust. P/O No.': null,
-                'Cust. D/O No.': null
-            };
-
-            const rawRefs = invoice.AdditionalDocumentReference ||
-                invoice.additionalDocumentReference ||
-                [];
-
-            const parsedRefs = rawRefs
+        additionalDocumentReferences: mapAdditionalDocRefsToPdfSlots(
+            (invoice.AdditionalDocumentReference || invoice.additionalDocumentReference || [])
                 .map(ref => getRefText(ref))
-                .filter(({ id }) => id && !isEmptyDocRefValue(id) && id !== 'Not Applicable');
-
-            const cifStyleRefs = parsedRefs.filter(ref => isPlaceholderRefId(ref.id));
-            const slotOrder = ['Exemption Cert. No.', 'Cust. P/O No.', 'Cust. D/O No.'];
-
-            for (const ref of parsedRefs) {
-                const legacySlot = classifyAdditionalDocRef(ref.description);
-
-                // Legacy: description is the label, ID holds the printed value
-                if (legacySlot && !isPlaceholderRefId(ref.id)) {
-                    if (!refsMap[legacySlot]) {
-                        refsMap[legacySlot] = ref.id;
-                    }
-                }
-            }
-
-            cifStyleRefs.forEach((ref, index) => {
-                if (isEmptyDocRefValue(ref.description)) {
-                    return;
-                }
-
-                const printedValue = ref.description;
-                let slot = null;
-
-                if (classifyExcelPoPattern(printedValue)) {
-                    slot = 'Cust. P/O No.';
-                } else if (classifyExcelDoPattern(printedValue)) {
-                    slot = 'Cust. D/O No.';
-                } else if (index < slotOrder.length) {
-                    slot = slotOrder[index];
-                }
-
-                if (slot && !refsMap[slot]) {
-                    refsMap[slot] = printedValue;
-                }
-            });
-
-            return slotOrder.map(label => ({
-                label,
-                id: refsMap[label] || 'Not Applicable'
-            }));
-        })(),
+                .filter(({ id }) => id && !isEmptyDocRefValue(id))
+        ),
 
         SupplierTIN: supplierParty.PartyIdentification?.find(id => id.ID[0].schemeID === 'TIN')?.ID[0]._ || 'NA',
         SupplierRegistrationNumber: supplierParty.PartyIdentification?.find(id => id.ID[0].schemeID === 'BRN')?.ID[0]._ || 'NA',
